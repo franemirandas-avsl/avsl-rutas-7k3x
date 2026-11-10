@@ -1,6 +1,6 @@
 """Convierte los datos del panel (actual.json + historial.json) en data.json para la web pública.
 Solo deja el nombre de pila de cada conductor y quita el detalle de las anomalías de horas.
-Uso: python3 publicar.py ruta/actual.json ruta/historial.json [ruta/cambios.json]
+Uso: python3 publicar.py ruta/actual.json ruta/historial.json [ruta/cambios.json] [ruta/resumen.json]
 """
 import json, sys, os
 
@@ -28,12 +28,19 @@ for s in actual.get("s", []):
             p[5] = pila(p[5])
         filas.append("|".join(p))
     s["rt"] = ";".join(filas)
+    q = s.get("q2")
+    if q:
+        q["tr"] = [[t[0], pila(t[1])] + t[2:] for t in q.get("tr", [])]
 
 camb = cargar(sys.argv[3]) if len(sys.argv) > 3 and os.path.exists(sys.argv[3]) else None
 if camb:
     for e in camb.get("ev", []):
         e["dr"] = pila(e.get("dr", ""))
 
+res = cargar(sys.argv[4]) if len(sys.argv) > 4 and os.path.exists(sys.argv[4]) else None
+if res and res.get("f") != actual.get("f"):
+    res = None
+
 dst = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data.json")
-json.dump({"actual": actual, "historial": hist, "cambios": camb}, open(dst, "w", encoding="utf-8"), ensure_ascii=False)
+json.dump({"actual": actual, "historial": hist, "cambios": camb, "resumen": res}, open(dst, "w", encoding="utf-8"), ensure_ascii=False)
 print("data.json:", actual.get("f"), actual.get("h"), len(actual.get("s", [])), "sites")

@@ -138,6 +138,32 @@ button{font:inherit;color:inherit}
 .ev .x{min-width:0}
 .ev .x strong{font-weight:600}
 .ev .x span{color:var(--muted)}
+/* calidad */
+.qk{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.qk div{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:2px}
+.qk b{font-family:var(--f-display);font-size:24px;font-weight:700}
+.qk small{font-size:12px;color:var(--muted)}
+.qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start}
+.rz{display:grid;grid-template-columns:minmax(0,170px) 1fr 40px;gap:6px 10px;align-items:center;font-size:13px}
+.rz span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rz .t{height:10px;background:var(--track);border-radius:0 4px 4px 0;overflow:hidden}
+.rz .t i{display:block;height:100%;background:var(--ink);border-radius:0 4px 4px 0}
+.rz .t i.bc{background:var(--accent)}
+.rz b{text-align:right;font-weight:600}
+.hist{display:grid;grid-template-columns:repeat(15,1fr);gap:2px;align-items:end;height:130px;position:relative}
+.hist .c{display:flex;flex-direction:column;justify-content:flex-end;height:100%;gap:2px;position:relative;z-index:1}
+.hist .c i{display:block;background:var(--muted);border-radius:4px 4px 0 0}
+.hist .c i.bc{background:var(--accent);border-radius:0}
+.hist .c i.bc:first-child{border-radius:4px 4px 0 0}
+.hist .band{position:absolute;top:0;bottom:0;background:var(--risk);opacity:.13;border-radius:6px;z-index:0}
+.hax{display:grid;grid-template-columns:repeat(15,1fr);gap:2px;font-size:11px;color:var(--muted);text-align:center}
+.qt{width:100%;border-collapse:collapse;font-size:13px}
+.qt th{font-size:11px;font-weight:600;color:var(--muted);text-align:right;padding:4px 6px;border-bottom:1px solid var(--line)}
+.qt th:first-child,.qt td:first-child{text-align:left}
+.qt td{text-align:right;padding:6px;border-bottom:1px solid var(--line)}
+.qt td:first-child{font-family:var(--f-display);font-weight:700;font-size:15px}
+.qt tr[data-q]{cursor:pointer}
+.qwrap{overflow-x:auto}
 .more{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:600;justify-self:start}
 @media (max-width:560px){h1{font-size:25px}.board{grid-template-columns:1fr}.pct{font-size:36px}}
 @media (prefers-reduced-motion:no-preference){.bar i{transition:width .6s ease}}
@@ -166,6 +192,17 @@ button{font:inherit;color:inherit}
       <div class="legend"><span><i style="background:var(--behind)"></i>Retrasada</span><span><i style="background:var(--risk)"></i>En riesgo</span><span><i style="background:var(--ontime)"></i>A tiempo</span><span><i style="background:var(--ahead)"></i>Adelantada</span><span><i style="background:transparent;box-shadow:inset 0 0 0 2px var(--done)"></i>Completada</span><span>· un cuadrado por ruta · toca un site para ver el detalle</span></div>
     </div>
     <div class="board" id="board"><div class="placeholder">Esperando la primera actualización. Aquí aparecerá un semáforo por site con un cuadrado por ruta.</div></div>
+  </section>
+
+  <section class="chg" id="resumen" hidden></section>
+
+  <section class="chg" id="calidad" hidden>
+    <div class="top">
+      <h2>Calidad de entrega</h2>
+      <div class="note">Paquetes con intento fallido. Si un paquete se entrega en un intento posterior deja de contar como pendiente, pero sigue contando como reintento.</div>
+    </div>
+    <div class="filters" id="qfil"></div>
+    <div id="qbody"></div>
   </section>
 
   <section class="chg">
@@ -355,6 +392,57 @@ function renderCambios(){
 document.addEventListener("click",e=>{const f=e.target.closest(".fchip");if(f){CFIL=f.dataset.f;renderCambios();return}
   if(e.target.id==="cmore"){CMAX+=8;renderCambios()}});
 
+const RZ={CUSTOMER_UNAVAILABLE:"Cliente no disponible",BUSINESS_CLOSED:"Negocio cerrado",RESCHEDULED_BY_CUSTOMER:"Reprogramado por el cliente",NO_LOCKER_AVAILABLE:"Sin taquilla disponible",OBJECT_MISSING:"Paquete no encontrado",INACCESSIBLE_DELIVERY_LOCATION:"Lugar de entrega inaccesible",BAD_WEATHER:"Mal tiempo",UNSAFE_DUE_TO_DOG:"Perro, no es seguro",NO_SECURE_LOCATION:"Sin lugar seguro",LOCKER_ISSUE:"Incidencia en taquilla",ADDRESS_NOT_FOUND:"Dirección no encontrada",LOCKER_SPACE_INSUFFICIENT:"Taquilla sin espacio",OTP_NOT_AVAILABLE:"Cliente sin código OTP",MISSING_OR_INCORRECT_ACCESS_CODE:"Código de acceso erróneo",SHIPMENT_NOT_READY:"Envío no preparado",COLLECTED_BY_CUSTOMER:"Ya recogido por el cliente",INACCESSIBLE_PICKUP_LOCATION:"Recogida inaccesible",PICKED_BY_CUSTOMER:"Ya recogido por el cliente",NONE:"Sin motivo",OTRO:"Otro motivo"};
+const rzn=k=>RZ[k]||String(k).toLowerCase().replace(/_/g," ").replace(/^./,c=>c.toUpperCase());
+let QFIL="";let RES=null;
+function qAgg(list){const A={at:0,pend:0,rec:0,dbl:0,rz:{},hr:{},hb:{},pk:{},tr:[]};
+  list.forEach(s=>{const q=s.q2;if(!q)return;["at","pend","rec","dbl"].forEach(k=>A[k]+=q[k]||0);
+    ["rz","hr","hb","pk"].forEach(k=>Object.entries(q[k]||{}).forEach(([x,n])=>A[k][x]=(A[k][x]||0)+n));
+    (q.tr||[]).forEach(t=>A.tr.push([s.c,...t]))});
+  A.tr.sort((a,b)=>b[3]-a[3]);return A}
+const b1316=q=>[13,14,15].reduce((t,h)=>t+((q.hb||{})[h]||0),0);
+const a1316=q=>[13,14,15].reduce((t,h)=>t+((q.hr||{})[h]||0),0);
+function rzBars(obj,hl){const m={};Object.entries(obj).forEach(([k,n])=>{const l=rzn(k);if(!m[l])m[l]=[k,0];m[l][1]+=n});const e=Object.values(m).sort((a,b)=>b[1]-a[1]);if(!e.length)return `<div class="empty">Ninguno.</div>`;const mx=e[0][1];
+  return e.slice(0,9).map(([k,n])=>`<div class="rz" title="${esc(rzn(k))}: ${n}"><span>${esc(rzn(k))}</span><span class="t"><i class="${k===hl?"bc":""}" style="width:${Math.max(2,n/mx*100)}%"></i></span><b class="num">${nf.format(n)}</b></div>`).join("")+(e.length>9?`<div class="empty">y ${e.length-9} motivos más</div>`:"")}
+function histo(q){const H=[];for(let h=8;h<=22;h++)H.push(h);const mx=Math.max(1,...H.map(h=>(q.hr||{})[h]||0));
+  const cols=H.map(h=>{const t=(q.hr||{})[h]||0,b=(q.hb||{})[h]||0;return `<div class="c" title="${h}:00–${h+1}:00 · ${t} intentos fallidos${b?`, ${b} con negocio cerrado`:""}">${t-b?`<i style="height:${(t-b)/mx*100}%"></i>`:""}${b?`<i class="bc" style="height:${b/mx*100}%"></i>`:""}</div>`}).join("");
+  return `<div class="hist"><div class="band" style="left:calc(${5/15*100}% );width:calc(${3/15*100}%)"></div>${cols}</div><div class="hax">${H.map(h=>`<span>${h}</span>`).join("")}</div>
+  <div class="legend"><span><i style="background:var(--accent)"></i>Negocio cerrado</span><span><i style="background:var(--muted)"></i>Otros motivos</span><span><i style="background:var(--risk);opacity:.35"></i>Franja de cierre 13–16 h</span></div>`}
+function qKpis(q){return `<div class="qk num">
+  <div><span class="lbl">Intentos fallidos</span><b>${nf.format(q.at)}</b><small>todos los intentos sin éxito del día</small></div>
+  <div><span class="lbl">Entregados después</span><b class="pos">${nf.format(q.rec)}</b><small>se entregaron en otro intento</small></div>
+  <div><span class="lbl">Siguen sin entregar</span><b class="${q.pend?"neg":""}">${nf.format(q.pend)}</b><small>tras el intento fallido</small></div>
+  <div><span class="lbl">Con 2 o más intentos</span><b>${nf.format(q.dbl)}</b><small>paquetes reintentados</small></div>
+  <div><span class="lbl">Negocio cerrado 13–16 h</span><b>${nf.format(b1316(q))}</b><small>de ${nf.format(a1316(q))} intentos fallidos en esa franja</small></div></div>`}
+function renderCalidad(S){
+  const con=S.filter(s=>s.q2);$("calidad").hidden=!con.length;if(!con.length)return;
+  $("qfil").innerHTML=[["","Todos"],...con.map(s=>[s.c,s.c])].map(([v,l])=>`<button class="fchip" data-qf="${v}" aria-pressed="${QFIL===v}">${l}</button>`).join("");
+  const sel=QFIL?con.filter(s=>s.c===QFIL):con,q=qAgg(sel);
+  const tabla=`<div class="box"><h2>Por site</h2><div class="qwrap"><table class="qt num"><thead><tr><th>Site</th><th>Intentos</th><th>Entregados después</th><th>Sin entregar</th><th>2+ intentos</th><th>Cerrado 13–16</th><th>Motivo principal</th></tr></thead><tbody>${con.map(s=>{const x=s.q2,top=Object.entries(x.rz||{}).sort((a,b)=>b[1]-a[1])[0];
+    return `<tr data-q="${s.c}"><td>${s.c}</td><td>${nf.format(x.at)}</td><td>${nf.format(x.rec)}</td><td class="${x.pend?"neg":""}">${nf.format(x.pend)}</td><td>${nf.format(x.dbl)}</td><td>${nf.format(b1316(x))}</td><td style="text-align:left">${top?esc(rzn(top[0]))+" ("+top[1]+")":"—"}</td></tr>`}).join("")}</tbody></table></div></div>`;
+  const pk=Object.values(q.pk).reduce((a,b)=>a+b,0);
+  $("qbody").innerHTML=`<div style="display:grid;gap:10px">${qKpis(q)}
+   <div class="qgrid"><div class="box"><h2>Motivo del intento</h2>${rzBars(q.rz,"BUSINESS_CLOSED")}</div>
+   <div class="box"><h2>A qué hora fallan</h2>${histo(q)}</div></div>
+   <div class="qgrid"><div class="box"><h2>Rutas con más intentos fallidos</h2>${q.tr.length?q.tr.slice(0,6).map(t=>`<div class="ai" style="--sev:var(--risk)"><span class="mono">${esc(sr(t[1]))}</span><span class="dr">${esc(t[2])}</span><span class="dl num">${t[3]}</span><span class="meta">${esc(t[0])} · ${t[4]} entregados después</span></div>`).join(""):`<div class="empty">Ninguna.</div>`}</div>
+   <div class="box"><h2>Recogidas fallidas · ${nf.format(pk)}</h2>${rzBars(q.pk)}</div></div>
+   ${QFIL?"":tabla}</div>`;
+}
+document.addEventListener("click",e=>{const f=e.target.closest("[data-qf]");if(f){QFIL=f.dataset.qf;renderCalidad([...SNAP.s].sort((a,b)=>ORDER.indexOf(a.c)-ORDER.indexOf(b.c)));return}
+  const r=e.target.closest("tr[data-q]");if(r){QFIL=r.dataset.q;renderCalidad([...SNAP.s].sort((a,b)=>ORDER.indexOf(a.c)-ORDER.indexOf(b.c)));$("calidad").scrollIntoView({behavior:"smooth"})}});
+function qBox(s){const q=s.q2;if(!q)return "";
+  return `<div class="box"><h2>Calidad</h2><div class="stats num"><div><span class="lbl">Intentos fallidos</span><b>${q.at}</b></div><div><span class="lbl">Entregados después</span><b class="pos">${q.rec}</b></div><div><span class="lbl">Sin entregar</span><b class="${q.pend?"neg":""}">${q.pend}</b></div></div>
+   <div class="note">${q.dbl} paquetes con 2 o más intentos · ${b1316(q)} negocios cerrados entre 13 y 16 h</div>${rzBars(q.rz,"BUSINESS_CLOSED")}${histo(q)}</div>`}
+function renderResumen(){
+  const el=$("resumen");if(!RES||!SNAP||RES.f!==SNAP.f){el.hidden=true;return}el.hidden=false;
+  const T=RES.s.reduce((a,s)=>{["r","p","pc","e","d"].forEach(k=>a[k]+=s[k]||0);return a},{r:0,p:0,pc:0,e:0,d:0});
+  const ev=CAMB&&CAMB.f===RES.f?CAMB.ev:[];const cnt=(c,t)=>ev.filter(e=>e.c===c&&e.t===t).length;
+  el.innerHTML=`<div class="top"><h2>Resumen del día</h2><div class="note">Cierre generado a las ${esc(RES.h)} cuando todos los sites terminaron.</div></div>
+  <div class="qk num"><div><span class="lbl">Rutas</span><b>${nf.format(T.r)}</b></div><div><span class="lbl">Paradas hechas</span><b>${fp(pct(T.pc,T.p))}%</b><small>${nf.format(T.pc)} de ${nf.format(T.p)}</small></div><div><span class="lbl">Entregados</span><b>${nf.format(T.e)}</b></div><div><span class="lbl">Devueltos</span><b class="${T.d?"neg":""}">${nf.format(T.d)}</b><small>${fp(pct(T.d,T.e+T.d))}% de lo salido</small></div></div>
+  <div class="box"><div class="qwrap"><table class="qt num"><thead><tr><th>Site</th><th>Rutas</th><th>% paradas</th><th>Entregados</th><th>Devueltos</th><th>% entrega</th><th>Última ruta</th><th>Rescates</th><th>Alertas parado</th><th>Fuera de jornada</th><th>Salida tarde</th></tr></thead><tbody>
+  ${RES.s.map(s=>`<tr data-site="${s.c}" style="cursor:pointer"><td>${s.c}</td><td>${s.r}</td><td>${fp(pct(s.pc,s.p))}%</td><td>${nf.format(s.e)}</td><td>${nf.format(s.d)}</td><td>${fp(pct(s.e,s.pq||s.e+s.d))}%</td><td>${esc(s.ul||"—")}</td><td>${cnt(s.c,"rescate")}</td><td>${cnt(s.c,"parado")}</td><td>${cnt(s.c,"jornada")}</td><td>${cnt(s.c,"salida_tarde")}</td></tr>`).join("")}</tbody></table></div>
+  <div class="note">% entrega = entregados / paquetes de la ruta. Alertas: veces que saltaron durante el día. El Excel con el detalle por ruta y conductor se envía al cerrar el día.</div></div>`}
+
 function openSite(code){
   const s=SNAP?.s.find(x=>x.c===code);if(!s)return;OPEN=code;
   const sev=severity(s),a=alerts(s),rs=routes(s);
@@ -376,6 +464,7 @@ function openSite(code){
     </div>
     ${cyc}
     <div class="box"><h2>Alertas</h2>${groups||`<div class="empty">Sin alertas en este site.</div>`}</div>
+    ${qBox(s)}
     ${eventos(s.c).length?`<div class="box"><h2>Cambios de hoy</h2><div>${timeline(eventos(s.c),24)}</div></div>`:""}
     <div class="box"><h2>Apoyo entre rutas</h2>
       <div class="agroup crit"><span class="lbl">Necesitan apoyo · ${behind.length}</span>${behind.length?behind.map(r=>rrow(r,"bad")).join(""):`<div class="empty">Ninguna ruta por detrás del plan.</div>`}</div>
@@ -395,7 +484,7 @@ function render(){
   renderStamp();
   if(!SNAP) return;
   const S=[...SNAP.s].sort((a,b)=>ORDER.indexOf(a.c)-ORDER.indexOf(b.c));
-  renderKpis(S);renderUrgent(S);renderBoard(S);renderCambios();
+  renderKpis(S);renderUrgent(S);renderBoard(S);renderResumen();renderCalidad(S);renderCambios();
   if(OPEN) openSite(OPEN); else {const h=location.hash.slice(1);if(h&&ORDER.includes(h))openSite(h)}
 }
 
@@ -404,7 +493,7 @@ async function cargar(){
     const r=await fetch("data.json?t="+Date.now(),{cache:"no-store"});
     if(!r.ok) throw new Error(r.status);
     const j=await r.json();
-    SNAP=j.actual||null;HIST=j.historial||null;CAMB=j.cambios||null;render();
+    SNAP=j.actual||null;HIST=j.historial||null;CAMB=j.cambios||null;RES=j.resumen||null;render();
   }catch(e){if(!SNAP)$("stampTxt").textContent="No se pueden leer los datos ahora"}
 }
 cargar();setInterval(cargar,120000);setInterval(renderStamp,60000);
