@@ -123,6 +123,22 @@ button{font:inherit;color:inherit}
 .ai .meta strong{color:var(--ink);font-weight:600}
 .empty{font-size:13px;color:var(--muted)}
 .placeholder{background:var(--panel);border:1px dashed var(--line);border-radius:10px;padding:28px;text-align:center;color:var(--muted)}
+/* cambios */
+.chg{display:grid;gap:10px}
+.filters{display:flex;flex-wrap:wrap;gap:6px}
+.fchip{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:4px 11px;font-size:13px;font-weight:600;cursor:pointer}
+.fchip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tl{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 14px 10px}
+.tlh{display:flex;align-items:baseline;gap:10px;padding:10px 0 4px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.tlh b{font-family:var(--f-display);font-size:20px}
+.ev{display:grid;grid-template-columns:12px 52px minmax(0,1fr);gap:8px;align-items:baseline;padding:5px 0}
+.ev i{width:9px;height:9px;border-radius:50%;background:var(--ontime);transform:translateY(-1px)}
+.ev.good i{background:var(--ahead)} .ev.bad i{background:var(--behind)} .ev.warn i{background:var(--risk)} .ev.info i{background:var(--done)} .ev.neutral i{background:var(--muted)}
+.ev .c{font-family:var(--f-display);font-weight:700;font-size:15px}
+.ev .x{min-width:0}
+.ev .x strong{font-weight:600}
+.ev .x span{color:var(--muted)}
+.more{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:600;justify-self:start}
 @media (max-width:560px){h1{font-size:25px}.board{grid-template-columns:1fr}.pct{font-size:36px}}
 @media (prefers-reduced-motion:no-preference){.bar i{transition:width .6s ease}}
 </style>
@@ -151,6 +167,15 @@ button{font:inherit;color:inherit}
     </div>
     <div class="board" id="board"><div class="placeholder">Esperando la primera actualización. Aquí aparecerá un semáforo por site con un cuadrado por ruta.</div></div>
   </section>
+
+  <section class="chg">
+    <div class="top">
+      <h2>Qué ha cambiado</h2>
+      <div class="note">Lo que ha pasado entre cada lectura y la anterior: rescates, rutas que mejoran o empeoran, alertas nuevas y resueltas, salidas y ritmo.</div>
+    </div>
+    <div class="filters" id="cfil"></div>
+    <div id="clist"><div class="placeholder">Los cambios aparecen a partir de la segunda lectura del día.</div></div>
+  </section>
 </div>
 
 <div class="shade" id="shade" hidden></div>
@@ -168,7 +193,7 @@ const nf=new Intl.NumberFormat("es-ES");
 const pct=(a,b)=>b?Math.round(a*1000/b)/10:0;
 const fp=n=>n.toLocaleString("es-ES");
 const sg=n=>(n>0?"+":n<0?"−":"")+nf.format(Math.abs(n));
-let SNAP=null,HIST=null,OPEN=null;
+let SNAP=null,HIST=null,CAMB=null,OPEN=null,CFIL="",CMAX=8;
 
 const ICON={
   pa:'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2.5" width="3.4" height="11" rx="1" fill="currentColor"/><rect x="9.6" y="2.5" width="3.4" height="11" rx="1" fill="currentColor"/></svg>',
@@ -193,24 +218,30 @@ function madridNow(){
   return {f:`${p.year}-${p.month}-${p.day}`,m:(+p.hour%24)*60+ +p.minute};
 }
 function sr(r){r=String(r??"");return r.startsWith("RDM_")?r.split("_").slice(0,2).join("_"):r}
-function routes(s){return (s.rt||"").split(";").filter(Boolean).map(t=>{const [ru,st,pc,p,dl,dr,cy,sal]=t.split("|");return {ru:sr(ru),st,pc:+pc,p:+p,dl:+dl,dr,cy,sal}})}
+function allRoutes(s){return (s.rt||"").split(";").filter(Boolean).map(t=>{const [ru,st,pc,p,dl,dr,cy,sal]=t.split("|");return {ru:sr(ru),st,pc:+pc,p:+p,dl:+dl,dr,cy,sal}})}
+const VCY={VES2:["A","B","C"],VCN1:["A","B","C"],VAD4:["A","E","B","C"]};
+// Ciclo VOLTA en curso: en cuanto arranca el siguiente, las rutas del anterior dejan de mostrarse
+function curCycle(s){const o=VCY[s.c];if(!o)return null;if(s.cc&&o.includes(s.cc))return s.cc;let m=0;allRoutes(s).forEach(r=>{const i=o.indexOf(r.cy);if(i>m&&(r.pc>0||r.st==="C"))m=i});return o[m]}
+function oldSet(s){const cc=curCycle(s);if(!cc)return new Set();const o=VCY[s.c],ci=o.indexOf(cc);return new Set(allRoutes(s).filter(r=>{const i=o.indexOf(r.cy);return i>-1&&i<ci}).map(r=>r.ru))}
+function routes(s){const old=oldSet(s);return allRoutes(s).filter(r=>!old.has(r.ru))}
+function nums(s){const cc=curCycle(s);if(!cc||!s.cy||!s.cy[cc])return {pc:s.pc,p:s.p,pp:s.pp,r:s.r,cc:null};const o=VCY[s.c],ci=o.indexOf(cc);let pc=0,p=0,pp=0,r=0;for(const k of o.slice(ci)){const c=s.cy[k];if(c){pc+=c.pc;p+=c.p;pp+=c.pp;r+=c.r}}return {pc,p,pp,r,cc}}
 function alerts(s){
-  const a=s.al||{};const o={};
-  AL.forEach(g=>{o[g.k]=(a[g.k]||[]).filter(x=>g.k!=="jo"||x.ya||x.ov>=15).map(x=>({...x,ru:sr(x.ru)}))});
+  const a=s.al||{};const o={};const old=oldSet(s);
+  AL.forEach(g=>{o[g.k]=(a[g.k]||[]).filter(x=>g.k!=="jo"||x.ya||x.ov>=15).map(x=>({...x,ru:sr(x.ru)})).filter(x=>!old.has(x.ru))});
   o.wa=s.wa||[];return o;
 }
 function nAlerts(s){const a=alerts(s);return Object.values(a).reduce((n,l)=>n+l.length,0)}
 function severity(s){
   if(s.err) return "none";
-  if(!s.r) return "none";
+  const n=nums(s);if(!n.r) return "none";
   const a=alerts(s);const rs=routes(s);const act=rs.filter(r=>r.st!=="C");
   if(act.length===0) return "done";
   const nowM=madridNow().m,mins=t=>{if(!t)return 0;const [h,m]=t.split(":").map(Number);return h*60+m};
   const enCurso=act.filter(r=>!r.sal||mins(r.sal)<=nowM-45);
   const muyAtras=enCurso.length?enCurso.filter(r=>r.dl<=-5).length/enCurso.length:0;
   // El color mide el rendimiento del site; las incidencias de conductores van en la banda de urgentes y en los iconos
-  if(s.pc<s.pp&&muyAtras>=.2) return "crit";
-  if(s.pc<s.pp||a.pa.length||a.jo.length||a.sa.length||a.wa.length) return "warn";
+  if(n.pc<n.pp&&muyAtras>=.2) return "crit";
+  if(n.pc<n.pp||a.pa.length||a.jo.length||a.sa.length||a.wa.length) return "warn";
   return "ok";
 }
 const SEVTXT={crit:"Crítico",warn:"Atención",ok:"En orden",done:"Terminado",none:"Sin datos"};
@@ -267,11 +298,11 @@ function renderBoard(S){
   $("board").innerHTML=list.map(s=>{
     const sev=severity(s);
     if(s.err||!s.r) return `<div class="tile none"><div class="th"><div><span class="code">${esc(s.c)}</span><span class="grp">${VOLTA.has(s.c)?"VOLTA":"Next Day"}</span></div><span class="state">${s.err?"Sin lectura":"Sin rutas"}</span></div><div class="note">${s.err?"No se pudieron leer sus rutas en la última actualización.":"Todavía no hay rutas hoy."}</div></div>`;
-    const pr=pct(s.pc,s.p),pl=pct(s.pp,s.p),dl=s.pc-s.pp,tr=trend(s.c);
+    const n=nums(s),pr=pct(n.pc,n.p),pl=pct(n.pp,n.p),dl=n.pc-n.pp,tr=trend(s.c);
     const rs=routes(s).sort((a,b)=>SORD[a.st]-SORD[b.st]||a.dl-b.dl);
-    const trTxt=tr&&tr.chg!==0?`<span class="${tr.chg>0?"pos":"neg"}">${tr.chg>0?"▲":"▼"} ${sg(tr.chg)} desde las ${esc(tr.prevH)}</span>`:(tr?`<span class="note">= desde las ${esc(tr.prevH)}</span>`:`<span class="note">vs plan</span>`);
+    const trTxt=n.cc?`<span class="note">frente al plan del ciclo ${esc(n.cc)}</span>`:tr&&tr.chg!==0?`<span class="${tr.chg>0?"pos":"neg"}">${tr.chg>0?"▲":"▼"} ${sg(tr.chg)} desde las ${esc(tr.prevH)}</span>`:(tr?`<span class="note">= desde las ${esc(tr.prevH)}</span>`:`<span class="note">vs plan</span>`);
     return `<div class="tile ${sev}" role="button" tabindex="0" data-site="${esc(s.c)}" aria-label="Ver detalle de ${esc(s.c)}">
-      <div class="th"><div><span class="code">${esc(s.c)}</span><span class="grp">${VOLTA.has(s.c)?"VOLTA":"Next Day"} · ${s.r} rutas</span></div><span class="state">${SEVTXT[sev]}</span></div>
+      <div class="th"><div><span class="code">${esc(s.c)}</span><span class="grp">${VOLTA.has(s.c)?"VOLTA":"Next Day"}${n.cc?` · ciclo ${n.cc}`:""} · ${n.r} rutas</span></div><span class="state">${SEVTXT[sev]}</span></div>
       <div class="big"><span class="pct num">${fp(pr)}<small>%</small></span><span class="trend num"><b class="${dl>=0?"pos":"neg"}">${sg(dl)} paradas</b>${trTxt}</span></div>
       <div class="bar" title="Plan: ${fp(pl)}%"><i style="width:${pr}%"></i><u style="left:calc(${pl}% - 1px)"></u></div>
       <div class="waffle" aria-label="Estado de cada ruta">${rs.map((r,i)=>`<button class="sq ${r.st}" data-i="${i}" title="${esc(r.ru)} · ${esc(r.dr)} · ${STN[r.st]} · ${r.pc}/${r.p} (${sg(r.dl)})"></button>`).join("")}</div>
@@ -301,10 +332,33 @@ function spark(code){
     <div class="legend" style="justify-content:space-between"><span>07:00</span><span>${pts.length} lecturas hoy</span><span>23:00</span></div>`;
 }
 
+const EVK={rescate:"info",salida:"info",fin:"info",ciclo:"info",mejora:"good",activo:"good",empeora:"bad",parado:"bad",jornada:"bad",salida_tarde:"warn",ritmo:"neutral"};
+function eventos(site){return ((CAMB&&SNAP&&CAMB.f===SNAP.f)?CAMB.ev:[]).filter(e=>!site||e.c===site||(!e.c&&!site))}
+function evHtml(e){const who=[e.ru?`<span class="mono">${esc(sr(e.ru))}</span>`:"",e.dr?esc(e.dr):""].filter(Boolean).join(" · ");
+  return `<div class="ev ${EVK[e.t]||"neutral"}"><i></i><span class="c">${esc(e.c||"Ritmo")}</span><span class="x">${who?`<strong>${who}</strong> <span>— ${esc(e.x)}</span>`:`<strong>${esc(e.x)}</strong>`}</span></div>`}
+function timeline(list,max){
+  if(!list.length) return "";
+  const horas=[...new Set(list.map(e=>e.h))].sort().reverse().slice(0,max);
+  return horas.map(h=>{const items=list.filter(e=>e.h===h);
+    const ord={ritmo:0,rescate:1,parado:2,jornada:3,salida_tarde:4,empeora:5,mejora:6,activo:7,salida:8,ciclo:9,fin:10};
+    items.sort((a,b)=>(ord[a.t]??20)-(ord[b.t]??20)||String(a.c).localeCompare(String(b.c)));
+    return `<div class="tlh"><b>${esc(h)}</b><span class="lbl">${items.length} cambio${items.length>1?"s":""}</span></div>${items.map(evHtml).join("")}`}).join("");
+}
+function renderCambios(){
+  const all=eventos("");
+  const sites=[...new Set(all.map(e=>e.c).filter(Boolean))].sort((a,b)=>ORDER.indexOf(a)-ORDER.indexOf(b));
+  $("cfil").innerHTML=all.length?[["","Todos"],...sites.map(c=>[c,c])].map(([v,l])=>`<button class="fchip" data-f="${v}" aria-pressed="${CFIL===v}">${l}</button>`).join(""):"";
+  const list=CFIL?all.filter(e=>e.c===CFIL):all;
+  const horas=new Set(list.map(e=>e.h)).size;
+  $("clist").innerHTML=list.length?`<div class="tl">${timeline(list,CMAX)}</div>${horas>CMAX?`<button class="more" id="cmore" style="margin-top:8px">Ver lecturas anteriores</button>`:""}`:`<div class="placeholder">Los cambios aparecen a partir de la segunda lectura del día.</div>`;
+}
+document.addEventListener("click",e=>{const f=e.target.closest(".fchip");if(f){CFIL=f.dataset.f;renderCambios();return}
+  if(e.target.id==="cmore"){CMAX+=8;renderCambios()}});
+
 function openSite(code){
   const s=SNAP?.s.find(x=>x.c===code);if(!s)return;OPEN=code;
   const sev=severity(s),a=alerts(s),rs=routes(s);
-  const pr=pct(s.pc,s.p),pl=pct(s.pp,s.p),dl=s.pc-s.pp;
+  const n=nums(s),pr=pct(n.pc,n.p),pl=pct(n.pp,n.p),dl=n.pc-n.pp;
   const behind=rs.filter(r=>r.st==="B"||r.st==="R").sort((x,y)=>x.dl-y.dl).slice(0,8);
   const ahead=rs.filter(r=>r.st!=="C"&&r.pc<r.p&&r.dl>0).sort((x,y)=>y.dl-x.dl).slice(0,3);
   const cyc=VOLTA.has(s.c)&&Object.keys(s.cy||{}).length?`<div class="box"><span class="lbl">Ciclos</span>${CYO.filter(k=>s.cy[k]).map(k=>{const c=s.cy[k];const x=pct(c.pc,c.p),y=pct(c.pp,c.p);const late=(c.st.BEHIND||0)+(c.st.AT_RISK||0);
@@ -313,7 +367,7 @@ function openSite(code){
     +(a.wa.length?`<div class="agroup crit"><span class="lbl">Anomalías de horas · ${a.wa.length}</span>${a.wa.map(x=>`<div class="ai"><span class="dr" style="grid-column:1 / 4">${esc(x.dr||"Conductor")}</span><span class="meta">${esc(x.x)}</span></div>`).join("")}</div>`:"");
   const rrow=(r,kind)=>`<div class="ai"><span class="mono">${esc(r.ru)}</span><span class="dr" title="${esc(r.dr)}">${esc(r.dr)}</span><span class="dl num ${kind==="good"?"pos":"neg"}">${sg(r.dl)}</span><span class="meta num">${STN[r.st]} · ${r.pc}/${r.p} paradas${r.sal?` · sale ${esc(r.sal)}`:""}${r.cy?` · ciclo ${esc(r.cy)}`:""}</span></div>`;
   $("drawer").innerHTML=`
-    <div class="dh"><div><span class="lbl">${VOLTA.has(s.c)?"VOLTA":"Next Day"} · ${s.r} rutas · ${SEVTXT[sev]}</span><h3 id="dTitle" class="code">${esc(s.c)}</h3></div><button class="close" id="dClose">Cerrar</button></div>
+    <div class="dh"><div><span class="lbl">${VOLTA.has(s.c)?"VOLTA":"Next Day"}${n.cc?` · ciclo ${n.cc} en curso`:""} · ${n.r} rutas · ${SEVTXT[sev]}</span><h3 id="dTitle" class="code">${esc(s.c)}</h3></div><button class="close" id="dClose">Cerrar</button></div>
     <div class="box">
       <div class="big"><span class="pct num">${fp(pr)}<small>%</small></span><span class="trend num"><b class="${dl>=0?"pos":"neg"}">${sg(dl)} paradas</b><span class="note">frente al plan (${fp(pl)}%)</span></span></div>
       <div class="bar"><i style="width:${pr}%"></i><u style="left:calc(${pl}% - 1px)"></u></div>
@@ -322,6 +376,7 @@ function openSite(code){
     </div>
     ${cyc}
     <div class="box"><h2>Alertas</h2>${groups||`<div class="empty">Sin alertas en este site.</div>`}</div>
+    ${eventos(s.c).length?`<div class="box"><h2>Cambios de hoy</h2><div>${timeline(eventos(s.c),24)}</div></div>`:""}
     <div class="box"><h2>Apoyo entre rutas</h2>
       <div class="agroup crit"><span class="lbl">Necesitan apoyo · ${behind.length}</span>${behind.length?behind.map(r=>rrow(r,"bad")).join(""):`<div class="empty">Ninguna ruta por detrás del plan.</div>`}</div>
       <div class="agroup good"><span class="lbl">Pueden dar soporte</span>${ahead.length?ahead.map(r=>rrow(r,"good")).join(""):`<div class="empty">Ninguna ruta en curso va por delante del plan.</div>`}</div>
@@ -340,7 +395,7 @@ function render(){
   renderStamp();
   if(!SNAP) return;
   const S=[...SNAP.s].sort((a,b)=>ORDER.indexOf(a.c)-ORDER.indexOf(b.c));
-  renderKpis(S);renderUrgent(S);renderBoard(S);
+  renderKpis(S);renderUrgent(S);renderBoard(S);renderCambios();
   if(OPEN) openSite(OPEN); else {const h=location.hash.slice(1);if(h&&ORDER.includes(h))openSite(h)}
 }
 
@@ -349,7 +404,7 @@ async function cargar(){
     const r=await fetch("data.json?t="+Date.now(),{cache:"no-store"});
     if(!r.ok) throw new Error(r.status);
     const j=await r.json();
-    SNAP=j.actual||null;HIST=j.historial||null;render();
+    SNAP=j.actual||null;HIST=j.historial||null;CAMB=j.cambios||null;render();
   }catch(e){if(!SNAP)$("stampTxt").textContent="No se pueden leer los datos ahora"}
 }
 cargar();setInterval(cargar,120000);setInterval(renderStamp,60000);
