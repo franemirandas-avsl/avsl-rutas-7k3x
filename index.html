@@ -267,7 +267,7 @@ const VCY={VES2:["A","B","C"],VCN1:["A","B","C"],VAD4:["A","E","B","C"]};
 function curCycle(s){const o=VCY[s.c];if(!o)return null;if(s.cc&&o.includes(s.cc))return s.cc;let m=0;allRoutes(s).forEach(r=>{const i=o.indexOf(r.cy);if(i>m&&(r.pc>0||r.st==="C"))m=i});return o[m]}
 function oldSet(s){const cc=curCycle(s);if(!cc)return new Set();const o=VCY[s.c],ci=o.indexOf(cc);return new Set(allRoutes(s).filter(r=>{const i=o.indexOf(r.cy);return i>-1&&i<ci}).map(r=>r.ru))}
 function routes(s){const old=oldSet(s);return allRoutes(s).filter(r=>!old.has(r.ru))}
-function nums(s){const cc=curCycle(s);if(!cc||!s.cy||!s.cy[cc])return {pc:s.pc,p:s.p,pp:s.pp,r:s.r,cc:null};const o=VCY[s.c],ci=o.indexOf(cc);let pc=0,p=0,pp=0,r=0;for(const k of o.slice(ci)){const c=s.cy[k];if(c){pc+=c.pc;p+=c.p;pp+=c.pp;r+=c.r}}return {pc,p,pp,r,cc}}
+function nums(s){const cc=curCycle(s);if(!cc||!s.cy||!s.cy[cc])return {pc:s.pc,p:s.p,pp:s.pp,r:s.r,cc:null,nd:s.nd};const o=VCY[s.c],ci=o.indexOf(cc);let pc=0,p=0,pp=0,r=0;for(const k of o.slice(ci)){const c=s.cy[k];if(c){pc+=c.pc;p+=c.p;pp+=c.pp;r+=c.r}}return {pc,p,pp,r,cc,nd:s.ndc?s.ndc[cc]:undefined}}
 function alerts(s){
   const a=s.al||{};const o={};const old=oldSet(s);
   AL.forEach(g=>{o[g.k]=(a[g.k]||[]).filter(x=>g.k!=="jo"||x.ya||x.ov>=15).map(x=>({...x,ru:sr(x.ru)})).filter(x=>!old.has(x.ru))});
@@ -308,8 +308,8 @@ function renderStamp(){
 
 function renderKpis(S){
   let r=0,p=0,pc=0,pp=0,e=0,q=0,tp=0,crit=0,al=0;
-  S.forEach(s=>{if(s.err)return;r+=s.r;p+=s.p;pc+=s.pc;pp+=s.pp;e+=s.e;q+=s.q;tp+=paq(s);al+=nAlerts(s);if(severity(s)==="crit")crit++});
-  $("kpis").innerHTML=`<span><b>${r}</b>rutas</span><span><b>${fp(pct(pc,p))}%</b>paradas hechas</span><span><b class="${pc-pp>=0?"pos":"neg"}">${sg(pc-pp)}</b>paradas vs plan</span><span><b>${fp(pct(e,tp))}%</b>paquetes entregados</span><span><b>${nf.format(e)}</b>entregados</span><span><b>${nf.format(q)}</b>restantes</span><span><b class="${crit?"neg":""}">${crit}</b>sites en crítico</span><span><b>${al}</b>alertas</span>`;
+  let nd=0;S.forEach(s=>{if(s.err)return;nd+=s.nd||0;r+=s.r;p+=s.p;pc+=s.pc;pp+=s.pp;e+=s.e;q+=s.q;tp+=paq(s);al+=nAlerts(s);if(severity(s)==="crit")crit++});
+  $("kpis").innerHTML=`<span><b>${r}</b>rutas</span>${nd?`<span><b>${nd}</b>conductores</span>`:""}<span><b>${fp(pct(pc,p))}%</b>paradas hechas</span><span><b class="${pc-pp>=0?"pos":"neg"}">${sg(pc-pp)}</b>paradas vs plan</span><span><b>${fp(pct(e,tp))}%</b>paquetes entregados</span><span><b>${nf.format(e)}</b>entregados</span><span><b>${nf.format(q)}</b>restantes</span><span><b class="${crit?"neg":""}">${crit}</b>sites en crítico</span><span><b>${al}</b>alertas</span>`;
 }
 
 function renderUrgent(S){
@@ -345,7 +345,7 @@ function renderBoard(S){
     const rs=routes(s).sort((a,b)=>SORD[a.st]-SORD[b.st]||a.dl-b.dl);
     const trTxt=n.cc?`<span class="note">frente al plan del ciclo ${esc(n.cc)}</span>`:tr&&tr.chg!==0?`<span class="${tr.chg>0?"pos":"neg"}">${tr.chg>0?"▲":"▼"} ${sg(tr.chg)} desde las ${esc(tr.prevH)}</span>`:(tr?`<span class="note">= desde las ${esc(tr.prevH)}</span>`:`<span class="note">vs plan</span>`);
     return `<div class="tile ${sev}" role="button" tabindex="0" data-site="${esc(s.c)}" aria-label="Ver detalle de ${esc(s.c)}">
-      <div class="th"><div><span class="code">${esc(s.c)}</span><span class="grp">${VOLTA.has(s.c)?"VOLTA":"Next Day"}${n.cc?` · ciclo ${n.cc}`:""} · ${n.r} rutas</span></div><span class="state">${SEVTXT[sev]}</span></div>
+      <div class="th"><div><span class="code">${esc(s.c)}</span><span class="grp">${VOLTA.has(s.c)?"VOLTA":"Next Day"}${n.cc?` · ciclo ${n.cc}`:""} · ${n.r} rutas${n.nd!=null?` · ${n.nd} conductores`:""}</span></div><span class="state">${SEVTXT[sev]}</span></div>
       <div class="lbl" style="margin-bottom:-6px">Paradas hechas${n.cc?` · ciclo ${esc(n.cc)}`:""}</div><div class="big"><span class="pct num">${fp(pr)}<small>%</small></span><span class="trend num"><b class="${dl>=0?"pos":"neg"}">${sg(dl)} paradas</b>${trTxt}</span></div>
       <div class="bar" title="Plan: ${fp(pl)}%"><i style="width:${pr}%"></i><u style="left:calc(${pl}% - 1px)"></u></div>
       ${pkLine(s)}
@@ -457,12 +457,12 @@ function openSite(code){
   const behind=rs.filter(r=>r.st==="B"||r.st==="R").sort((x,y)=>x.dl-y.dl).slice(0,8);
   const ahead=rs.filter(r=>r.st!=="C"&&r.pc<r.p&&r.dl>0).sort((x,y)=>y.dl-x.dl).slice(0,3);
   const cyc=VOLTA.has(s.c)&&Object.keys(s.cy||{}).length?`<div class="box"><span class="lbl">Ciclos</span>${CYO.filter(k=>s.cy[k]).map(k=>{const c=s.cy[k];const x=pct(c.pc,c.p),y=pct(c.pp,c.p);const late=(c.st.BEHIND||0)+(c.st.AT_RISK||0);
-    return `<div class="cy"><span class="k">${k}</span><div class="bar" title="${c.r} rutas"><i style="width:${x}%"></i><u style="left:calc(${y}% - 1px)"></u></div><span class="v num">${fp(x)}% · ${c.r} rutas${late?` · <span class="neg">${late}</span>`:""}</span></div>`}).join("")}</div>`:"";
+    return `<div class="cy"><span class="k">${k}</span><div class="bar" title="${c.r} rutas"><i style="width:${x}%"></i><u style="left:calc(${y}% - 1px)"></u></div><span class="v num">${fp(x)}% · ${c.r} rutas${c.nd!=null?` · ${c.nd} cond.`:""}${late?` · <span class="neg">${late}</span>`:""}</span></div>`}).join("")}</div>`:"";
   const groups=AL.filter(g=>a[g.k].length).map(g=>`<div class="agroup ${g.sev}"><span class="lbl">${g.t} · ${a[g.k].length}</span>${a[g.k].map(x=>`<div class="ai"><span class="mono">${esc(x.ru)}</span><span class="dr" title="${esc(x.dr)}">${esc(x.dr)}</span><span></span><span class="meta num">${g.line(x)}</span></div>`).join("")}</div>`).join("")
     +(a.wa.length?`<div class="agroup crit"><span class="lbl">Anomalías de horas · ${a.wa.length}</span>${a.wa.map(x=>`<div class="ai"><span class="dr" style="grid-column:1 / 4">${esc(x.dr||"Conductor")}</span><span class="meta">${esc(x.x)}</span></div>`).join("")}</div>`:"");
   const rrow=(r,kind)=>`<div class="ai"><span class="mono">${esc(r.ru)}</span><span class="dr" title="${esc(r.dr)}">${esc(r.dr)}</span><span class="dl num ${kind==="good"?"pos":"neg"}">${sg(r.dl)}</span><span class="meta num">${STN[r.st]} · ${r.pc}/${r.p} paradas${r.sal?` · sale ${esc(r.sal)}`:""}${r.cy?` · ciclo ${esc(r.cy)}`:""}</span></div>`;
   $("drawer").innerHTML=`
-    <div class="dh"><div><span class="lbl">${VOLTA.has(s.c)?"VOLTA":"Next Day"}${n.cc?` · ciclo ${n.cc} en curso`:""} · ${n.r} rutas · ${SEVTXT[sev]}</span><h3 id="dTitle" class="code">${esc(s.c)}</h3></div><button class="close" id="dClose">Cerrar</button></div>
+    <div class="dh"><div><span class="lbl">${VOLTA.has(s.c)?"VOLTA":"Next Day"}${n.cc?` · ciclo ${n.cc} en curso`:""} · ${n.r} rutas${n.nd!=null?` · ${n.nd} conductores`:""} · ${SEVTXT[sev]}</span><h3 id="dTitle" class="code">${esc(s.c)}</h3></div><button class="close" id="dClose">Cerrar</button></div>
     <div class="box">
       <div class="lbl" style="margin-bottom:-6px">Paradas hechas${n.cc?` · ciclo ${esc(n.cc)}`:""}</div><div class="big"><span class="pct num">${fp(pr)}<small>%</small></span><span class="trend num"><b class="${dl>=0?"pos":"neg"}">${sg(dl)} paradas</b><span class="note">frente al plan (${fp(pl)}%)</span></span></div>
       <div class="bar"><i style="width:${pr}%"></i><u style="left:calc(${pl}% - 1px)"></u></div>
