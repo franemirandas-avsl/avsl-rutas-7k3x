@@ -197,6 +197,8 @@ button{font:inherit;color:inherit}
     <div class="board" id="board"><div class="placeholder">Esperando la primera actualización. Aquí aparecerá un semáforo por site con un cuadrado por ruta.</div></div>
   </section>
 
+  <section class="chg" id="bloques" hidden></section>
+
   <section class="chg" id="resumen" hidden></section>
 
   <section class="chg" id="calidad" hidden>
@@ -401,7 +403,7 @@ document.addEventListener("click",e=>{const f=e.target.closest(".fchip");if(f){C
 
 const RZ={CUSTOMER_UNAVAILABLE:"Cliente no disponible",BUSINESS_CLOSED:"Negocio cerrado",RESCHEDULED_BY_CUSTOMER:"Reprogramado por el cliente",NO_LOCKER_AVAILABLE:"Sin taquilla disponible",OBJECT_MISSING:"Paquete no encontrado",INACCESSIBLE_DELIVERY_LOCATION:"Lugar de entrega inaccesible",BAD_WEATHER:"Mal tiempo",UNSAFE_DUE_TO_DOG:"Perro, no es seguro",NO_SECURE_LOCATION:"Sin lugar seguro",LOCKER_ISSUE:"Incidencia en taquilla",ADDRESS_NOT_FOUND:"Dirección no encontrada",LOCKER_SPACE_INSUFFICIENT:"Taquilla sin espacio",OTP_NOT_AVAILABLE:"Cliente sin código OTP",MISSING_OR_INCORRECT_ACCESS_CODE:"Código de acceso erróneo",SHIPMENT_NOT_READY:"Envío no preparado",COLLECTED_BY_CUSTOMER:"Ya recogido por el cliente",INACCESSIBLE_PICKUP_LOCATION:"Recogida inaccesible",PICKED_BY_CUSTOMER:"Ya recogido por el cliente",NONE:"Sin motivo",OTRO:"Otro motivo"};
 const rzn=k=>RZ[k]||String(k).toLowerCase().replace(/_/g," ").replace(/^./,c=>c.toUpperCase());
-let QFIL="";let RES=null;
+let QFIL="";let RES=null,BLQ=null;
 function qAgg(list){const A={at:0,pend:0,rec:0,dbl:0,rz:{},hr:{},hb:{},pk:{},tr:[]};
   list.forEach(s=>{const q=s.q2;if(!q)return;["at","pend","rec","dbl"].forEach(k=>A[k]+=q[k]||0);
     ["rz","hr","hb","pk"].forEach(k=>Object.entries(q[k]||{}).forEach(([x,n])=>A[k][x]=(A[k][x]||0)+n));
@@ -440,6 +442,18 @@ document.addEventListener("click",e=>{const f=e.target.closest("[data-qf]");if(f
 function qBox(s){const q=s.q2;if(!q)return "";
   return `<div class="box"><h2>Calidad</h2><div class="stats num"><div><span class="lbl">Intentos fallidos</span><b>${q.at}</b></div><div><span class="lbl">Entregados después</span><b class="pos">${q.rec}</b></div><div><span class="lbl">Sin entregar</span><b class="${q.pend?"neg":""}">${q.pend}</b></div></div>
    <div class="note">${q.dbl} paquetes con 2 o más intentos · ${b1316(q)} negocios cerrados entre 13 y 16 h</div>${rzBars(q.rz,"BUSINESS_CLOSED")}${histo(q)}</div>`}
+function renderBloques(){
+  const el=$("bloques");const B=BLQ;if(!B||!B.s){el.hidden=true;return}el.hidden=false;
+  const dias=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];const d=new Date(B.f+"T12:00:00");
+  const S=[...B.s].sort((a,b)=>ORDER.indexOf(a.c)-ORDER.indexOf(b.c));
+  const T=S.filter(s=>!s.err).reduce((a,s)=>{a.b+=s.b;a.a+=s.a;a.so+=s.so;a.fa+=s.fa;return a},{b:0,a:0,so:0,fa:0});
+  const cyc=s=>s.cy?Object.entries(s.cy).map(([k,x])=>`${k} ${x.b}/${x.d}`).join(" · "):"";
+  el.innerHTML=`<div class="top"><h2>Bloques de mañana · ${dias[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}</h2><div class="note">Bloques de Amazon frente a conductores con turno de Driver en Deputy. Leído a las ${esc(B.h)}; se revisa cada 2 horas.</div></div>
+  <div class="box"><div class="qwrap"><table class="qt num"><thead><tr><th>Site</th><th>Bloques Amazon</th><th>Bloques asignados</th><th>Conductores Deputy</th><th>Sobrantes en Deputy</th><th>Por ciclo (bloques/conductores)</th></tr></thead><tbody>
+  ${S.map(s=>s.err?`<tr><td>${s.c}</td><td colspan="5" class="note">Sin datos de Amazon</td></tr>`:`<tr><td>${s.c}</td><td>${s.b}</td><td>${s.a}${s.b?` <small class="note">(${Math.round(100*s.a/s.b)}%)</small>`:""}</td><td>${s.d}</td><td><b class="${s.so?"pos":""}">${s.so}</b>${s.fa?` <span class="neg">· faltan ${s.fa}</span>`:""}</td><td class="note">${cyc(s)}</td></tr>`).join("")}
+  <tr style="font-weight:700"><td>Total</td><td>${T.b}</td><td>${T.a}</td><td></td><td>${T.so}${T.fa?` <span class="neg">· faltan ${T.fa}</span>`:""}</td><td></td></tr></tbody></table></div>
+  ${B.err?`<div class="note neg">${esc(B.err)}</div>`:""}
+  <div class="note">Solo cuenta bloques activos (no cancelados). VAD4 se compara por turno: mañana con el mayor de A/E y tarde con el mayor de B/C. En VES2 y VCN1, cada ciclo con sus turnos.</div></div>`}
 function renderResumen(){
   const el=$("resumen");if(!RES||!SNAP||RES.f!==SNAP.f){el.hidden=true;return}el.hidden=false;
   const T=RES.s.reduce((a,s)=>{["r","p","pc","e","d"].forEach(k=>a[k]+=s[k]||0);return a},{r:0,p:0,pc:0,e:0,d:0});
@@ -492,7 +506,7 @@ function render(){
   renderStamp();
   if(!SNAP) return;
   const S=[...SNAP.s].sort((a,b)=>ORDER.indexOf(a.c)-ORDER.indexOf(b.c));
-  renderKpis(S);renderUrgent(S);renderBoard(S);renderResumen();renderCalidad(S);renderCambios();
+  renderKpis(S);renderUrgent(S);renderBoard(S);renderBloques();renderResumen();renderCalidad(S);renderCambios();
   if(OPEN) openSite(OPEN); else {const h=location.hash.slice(1);if(h&&ORDER.includes(h))openSite(h)}
 }
 
@@ -501,7 +515,7 @@ async function cargar(){
     const r=await fetch("data.json?t="+Date.now(),{cache:"no-store"});
     if(!r.ok) throw new Error(r.status);
     const j=await r.json();
-    SNAP=j.actual||null;HIST=j.historial||null;CAMB=j.cambios||null;RES=j.resumen||null;render();
+    SNAP=j.actual||null;HIST=j.historial||null;CAMB=j.cambios||null;RES=j.resumen||null;BLQ=j.bloques||null;render();
   }catch(e){if(!SNAP)$("stampTxt").textContent="No se pueden leer los datos ahora"}
 }
 cargar();setInterval(cargar,120000);setInterval(renderStamp,60000);
